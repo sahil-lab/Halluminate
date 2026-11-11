@@ -1,0 +1,210 @@
+name: halluminate
+
+x-runtime: &runtime
+  init: true
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  networks: [runtime]
+  logging:
+    driver: json-file
+    options:
+      max-size: 5m
+      max-file: "2"
+
+x-tool: &tool
+  profiles: [tools]
+  init: true
+  working_dir: /workspace
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  cpus: 1.0
+  pids_limit: 256
+
+services:
+  db:
+    <<: *runtime
+    image: postgres:17-alpine
+    user: postgres
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    environment:
+      POSTGRES_DB: halluminate
+      POSTGRES_USER: halluminate
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets: [db_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/run/postgresql:rw,noexec,nosuid,size=16m,uid=70,gid=70
+    command:
+      - postgres
+      - -c
+      - shared_buffers=32MB
+      - -c
+      - max_connections=20
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=16MB
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U halluminate -d halluminate"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+
+  api: &api
+    <<: *runtime
+    networks: [runtime, tooling]
+    image: eclipse-temurin:21-jre-alpine
+    user: "10001:10001"
+    working_dir: /app
+    mem_limit: 512m
+    cpus: 0.75
+    pids_limit: 128
+    environment: &api-env
+      JAVA_TOOL_OPTIONS:
+        -XX:MaxRAMPercentage=60.0 -XX:ActiveProcessorCount=2 -XX:+ExitOnOutOfMemoryError
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/halluminate
+      SPRING_DATASOURCE_USERNAME: halluminate
+      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
+      APP_ALLOWED_ORIGINS: http://localhost:18104,http://127.0.0.1:18104,http://web:8080
+    secrets:
+      - source: db_password
+        target: spring.datasource.password
+    volumes:
+      - ../../services/api/target:/app:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    command: [java, -jar, /app/halluminate-api.jar]
+    ports:
+      - "127.0.0.1:18204:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          wget,
+          -q,
+          -O,
+          /dev/null,
+          "http://127.0.0.1:8080/actuator/health/readiness",
+        ]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 24
+
+  web:
+    <<: *runtime
+    networks: [runtime, tooling]
+    image: nginx:1.28-alpine
+    user: "101:101"
+    mem_limit: 96m
+    cpus: 0.25
+    pids_limit: 64
+    entrypoint: [nginx]
+    command: [-g, "daemon off;"]
+    volumes:
+      - ../../apps/web/dist:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    ports:
+      - "127.0.0.1:18104:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  java:
+    <<: *tool
+    image: maven:3.9.11-eclipse-temurin-21
+    mem_limit: 1024m
+    networks: [runtime, tooling]
+    environment:
+      MAVEN_OPTS: -Xmx320m -XX:ActiveProcessorCount=2
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/halluminate
+      SPRING_DATASOURCE_USERNAME: halluminate
+      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
+    secrets:
+      - source: db_password
+        target: spring.datasource.password
+    volumes:
+      - ../..:/workspace
+      - maven_cache:/root/.m2
+    command: [mvn, --version]
+
+  node:
+    <<: *tool
+    image: node:22-bookworm-slim
+    mem_limit: 768m
+    networks: [runtime, tooling]
+    environment:
+      NODE_OPTIONS: --max-old-space-size=512
+    volumes:
+      - ../..:/workspace
+      - node_modules:/workspace/node_modules
+      - npm_cache:/root/.npm
+    command: [node, --version]
+
+  e2e:
+    <<: *tool
+    image: mcr.microsoft.com/playwright:v1.65.0-noble
+    mem_limit: 768m
+    shm_size: 128m
+    networks: [runtime]
+    environment:
+      NODE_OPTIONS: --max-old-space-size=384
+      E2E_BASE_URL: http://web:8080
+      E2E_API_URL: http://api:8080
+      E2E_UNAVAILABLE_API_URL: http://api-unavailable:8080
+    volumes:
+      - ../..:/workspace
+      - node_modules:/workspace/node_modules:ro
+    command: [npm, run, "test:e2e"]
+
+  api-unavailable:
+    <<: *api
+    profiles: [tools]
+    networks: [runtime]
+    restart: "no"
+    ports: []
+    depends_on: {}
+    environment:
+      <<: *api-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:1/unavailable
+      SPRING_FLYWAY_ENABLED: "false"
+      SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
+    healthcheck:
+      test:
+        [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/actuator/health/liveness"]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 24
+
+networks:
+  runtime:
+    internal: true
+  tooling: {}
+
+volumes:
+  postgres_data:
+  maven_cache:
+  node_modules:
+  npm_cache:
+
+secrets:
+  db_password:
+    file: ../../.local/secrets/db-password

@@ -1,0 +1,180 @@
+openapi: 3.0.3
+info:
+  title: Halluminate bootstrap API
+  version: 0.1.0
+  description: |
+    Independent local-only Phase 1 skeleton. Accepts a single fictional fixture.
+    No task/run/agent/replay APIs are implemented. Loopback isolation and Origin
+    checks are not authentication; do not expose this API beyond a trusted host.
+servers:
+  - url: http://localhost:18204
+paths:
+  /actuator/health/liveness:
+    get:
+      operationId: getLiveness
+      responses:
+        "200":
+          description: API process is live.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /actuator/health/readiness:
+    get:
+      operationId: getReadiness
+      responses:
+        "200":
+          description: API and database are ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: API or database is not ready. No component details exposed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /api/bootstrap/probes:
+    post:
+      operationId: checkBootstrapPersistence
+      description: |
+        Insert or return the same bounded synthetic probe. Returns 200 on both
+        initial and repeated requests. Repeats preserve its UUID and createdAt.
+        Unknown JSON properties are rejected. Unexpected browser Origins are
+        rejected; local requests without Origin are allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [fixture]
+              properties:
+                fixture:
+                  type: string
+                  enum: [phase-1-synthetic]
+      responses:
+        "200":
+          description: Persisted probe, with a generated X-Request-ID response header.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Probe"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/ForbiddenOrigin"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "503":
+          $ref: "#/components/responses/DatabaseUnavailable"
+  /api/bootstrap/probes/{id}:
+    get:
+      operationId: getBootstrapProbe
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Persisted probe.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Probe"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/DatabaseUnavailable"
+components:
+  headers:
+    RequestId:
+      description: Server-generated identifier; client-supplied IDs are not trusted.
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN, OUT_OF_SERVICE, UNKNOWN]
+    Probe:
+      type: object
+      additionalProperties: false
+      required: [id, fixture, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fixture:
+          type: string
+          enum: [phase-1-synthetic]
+        createdAt:
+          type: string
+          format: date-time
+    Problem:
+      type: object
+      required: [type, title, status, detail, requestId]
+      properties:
+        type:
+          type: string
+          example: about:blank
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+  responses:
+    InvalidRequest:
+      description: Missing, malformed or unapproved input.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ForbiddenOrigin:
+      description: Browser Origin is not explicitly allowed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnsupportedMediaType:
+      description: Content-Type must be application/json.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Probe or route not found.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    DatabaseUnavailable:
+      description: Database access failed. No SQL or connection details exposed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"

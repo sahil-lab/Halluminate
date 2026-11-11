@@ -1,0 +1,32 @@
+name: Halluminate Phase 1
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the local-equivalent verification workflow
+        shell: pwsh
+        run: ./scripts/dev.ps1 -Action Verify
+      - name: Save non-secret test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: halluminate-phase-1-evidence
+          path: |
+            .local/evidence/
+            services/api/target/surefire-reports/
+            services/api/target/failsafe-reports/
+          if-no-files-found: warn
+      - name: Stop only this job's Halluminate runtime
+        if: always()
+        run: docker compose -p halluminate -f infra/docker/compose.yaml stop api web db

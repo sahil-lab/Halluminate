@@ -1,0 +1,73 @@
+spring:
+  application:
+    name: halluminate-api
+  main:
+    banner-mode: "off"
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      fail-on-trailing-tokens: true
+  datasource:
+    hikari:
+      maximum-pool-size: 4
+      minimum-idle: 1
+      connection-timeout: 2000
+      validation-timeout: 1000
+      initialization-fail-timeout: 30000
+      data-source-properties:
+        connectTimeout: 3
+        socketTimeout: 5
+  jdbc:
+    template:
+      query-timeout: 3
+  flyway:
+    enabled: true
+    clean-disabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+  servlet:
+    multipart:
+      enabled: false
+
+server:
+  port: 8080
+  shutdown: graceful
+  max-http-request-header-size: 8KB
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+  tomcat:
+    threads:
+      max: 12
+      min-spare: 2
+    max-connections: 64
+    accept-count: 16
+    connection-timeout: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
+
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    org.springframework.boot.actuate.jdbc.DataSourceHealthIndicator: ERROR
+
+app:
+  allowed-origins: ${APP_ALLOWED_ORIGINS:http://localhost:18104,http://127.0.0.1:18104}
