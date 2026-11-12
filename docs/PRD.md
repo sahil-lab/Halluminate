@@ -35,9 +35,10 @@ later phases, commit changes, access real data, or deploy.
 
 README, requirements, architecture diagram, threat model, non-goals, measurable
 acceptance criteria, phase plan, decision log, coding conventions, ignore rules, and a
-local-equivalent CI workflow. The workspace initially contains only the PDF. There is no
-Git repository or branch; Git initialization requires separate approval and is not part
-of this execution.
+local-equivalent CI workflow. The initial workspace contained only the PDF and had no
+Git repository or branch. Git initialization requires separate approval and is not part
+of this execution. Concurrently appearing Git metadata at the final handoff is recorded
+separately in the verification report.
 
 ### Phase 1
 

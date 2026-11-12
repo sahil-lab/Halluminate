@@ -15,8 +15,8 @@ flowchart LR
 The shared backend network is Docker `internal: true`; PostgreSQL is attached only
 there. API and web also attach to the project's existing tooling/ingress bridge so
 Docker can actually publish their loopback ports without allocating a third network.
-API/web therefore have outbound network capability, but no outbound integrations;
-this is not a deny-all egress firewall or an agent execution environment. See D011.
+API/web therefore have outbound network capability, but no outbound integrations; this
+is not a deny-all egress firewall or an agent execution environment. See D011.
 
 ## Repository boundaries
 
@@ -69,6 +69,11 @@ Versions of package dependencies are pinned and locked. Published versions and N
 engine compatibility are checked before installation. Maven and Node compile into
 project-local ignored build directories; runtime images mount only built artifacts and
 runtime configuration read-only.
+
+Before Java starts, its packaged JAR is copied once into a 96 MiB tmpfs, still within
+the API's 512 MiB memory ceiling. The runtime snapshot avoids slow random Windows
+bind-mount reads and remains unchanged during subsequent source builds. API/web are
+explicitly recreated after builds. Database storage is preserved.
 
 The local entry script generates a password with a cryptographic RNG only when missing.
 Docker secrets mount it as a file; Spring consumes it through a configuration tree. It

@@ -13,8 +13,11 @@ export default defineConfig({
   outputDir: "../../.local/evidence/playwright-results",
   reporter: [
     ["list"],
-    ["junit", { outputFile: ".local/evidence/e2e-junit.xml" }],
-    ["html", { outputFolder: ".local/evidence/playwright-report", open: "never" }],
+    ["junit", { outputFile: "../../.local/evidence/e2e-junit.xml" }],
+    [
+      "html",
+      { outputFolder: "../../.local/evidence/playwright-report", open: "never" },
+    ],
   ],
   use: {
     baseURL: process.env["E2E_BASE_URL"] ?? "http://127.0.0.1:18104",

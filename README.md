@@ -14,9 +14,28 @@ Task worlds, task/run APIs, agents, spreadsheets, action traces, snapshots, grad
 replay, and benchmarks are **not implemented** in this iteration. A successful bootstrap
 probe is not evidence that an agent evaluation works.
 
-Implementation and verification are initially pending. See
-[the phase plan](docs/PLAN.md) for current gates and [the requirements](docs/PRD.md) for
-measurable acceptance criteria.
+The original Phase 0/1 baseline passed both builds, formatting, 27 automated tests,
+actual loopback access, and persistence across API recreation. See
+[verification evidence and exact changed files](docs/VERIFICATION.md),
+[the phase plan](docs/PLAN.md), and [the requirements](docs/PRD.md).
+
+## The visual experience
+
+The redesigned interface pairs oversized editorial typography with an original,
+pointer-responsive luminous field, a contrasting concept section, and a live persistence
+console. Space Grotesk is bundled locally under the OFL-1.1 license; no font CDN, remote
+artwork, video, tracking, or graphics framework is used.
+
+The decorative artwork is explicitly not evaluation data. Motion is capped at 30 frames
+per second, pauses offscreen or when the tab is hidden, and defaults to a still image
+with reduced-motion preferences. A visible play/pause control, keyboard skip link,
+native section navigation, and responsive layouts preserve access to the actual working
+sandbox.
+
+This frontend-only refinement passed six frontend tests and seven real Chromium E2E
+tests, including persistence, failure/retry, 320-pixel keyboard access, and
+pixel-identical reduced-motion frames. Desktop, tablet, and mobile screenshots were
+inspected. The backend and Phase 2 boundary are unchanged.
 
 ## Local development
 
@@ -34,9 +53,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 -Action Ve
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 -Action Up
 ```
 
-These commands will be supplied by Phase 1. The first run downloads public dependency
-packages and container images. It creates a local database password under the ignored
-`.local/secrets` directory, without displaying it.
+The first run downloads public dependency packages and container images. It creates a
+local database password under the ignored `.local/secrets` directory, without displaying
+it. Builds and tests run sequentially inside resource-limited containers. After a build,
+API/web are recreated to load the new artifacts; database data is kept.
 
 - Dashboard: <http://localhost:18104>
 - API readiness: <http://localhost:18204/actuator/health/readiness>
@@ -72,6 +92,7 @@ Runtime services have read-only root filesystems and explicit resource limits.
 - [Decisions and trade-offs](docs/DECISIONS.md)
 - [Coding and verification conventions](docs/CONVENTIONS.md)
 - [Phase plan](docs/PLAN.md)
+- [Verified results, failure fixes, and exact file inventory](docs/VERIFICATION.md)
 
 Redis, Kafka, workers, OpenTelemetry export, cloud hosting, and real agent tools are
 deliberately deferred until justified by an approved later phase.
@@ -83,6 +104,42 @@ code-execution sandbox. Loopback exposure is not authentication. Other users or
 processes with access to the host/Docker daemon remain trusted. The local database owner
 is used for both migrations and the single synthetic probe; separate migration/runtime
 roles and authentication are later-phase work.
+
+API/web use a project-scoped bridge for working loopback port publication and can make
+outbound connections; no egress-firewall guarantee is claimed. The DB is internal-only.
+This session did not initialize Git, deploy to a cloud, or execute Phase 2+. Hosted CI
+was not run or verified by this session. Git metadata appeared concurrently during final
+checks and was left untouched as instructed.
+
+## Local walkthrough and troubleshooting
+
+1. Run `Verify`, then open <http://localhost:18104>.
+2. Confirm "API and database ready".
+3. Click "Run synthetic check" and inspect the persisted ID.
+4. Repeat the check: the ID and creation time remain unchanged. This demonstrates
+   infrastructure persistence, not agent evaluation or replay.
+
+- If Docker is unavailable, start its Linux engine and retry.
+- If the password file is missing while the DB volume exists, restore that file; the
+  script deliberately refuses to silently reset the database.
+- If startup or a test fails, inspect `.local/evidence`, API logs, and the JUnit
+  reports. Do not disable the failing check or delete volumes.
+- The shared Docker address pool was exhausted during development. The final topology
+  reuses only two Halluminate networks; do not prune other projects.
+- Host sleep or a paused Docker engine can expire startup deadlines. Resume the engine
+  and rerun; successful component checks are not a successful full command.
+
+Additional local commands:
+
+```powershell
+.\scripts\dev.ps1 -Action Format
+.\scripts\dev.ps1 -Action Test
+.\scripts\dev.ps1 -Action Smoke
+.\scripts\dev.ps1 -Action Status
+```
+
+`Test` expects installed dependencies; `Smoke` expects the runtime already started.
+`Verify` performs all prerequisites. Its temporary failure helper is always stopped.
 
 No evaluation success rate, replay accuracy, cost, latency target, grader agreement, or
 benchmark result is claimed.

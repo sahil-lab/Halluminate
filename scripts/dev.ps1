@@ -81,7 +81,13 @@ function Test-Backend {
 }
 
 function Start-Runtime {
-    Invoke-Compose -CommandArguments @('up', '--detach', '--wait', '--wait-timeout', '180', 'db', 'api', 'web')
+    Invoke-Compose -CommandArguments @('up', '--detach', '--wait', '--wait-timeout', '120', 'db')
+    Invoke-Compose -CommandArguments @(
+        'up', '--detach', '--no-deps', '--force-recreate', '--wait', '--wait-timeout', '180', 'api'
+    )
+    Invoke-Compose -CommandArguments @(
+        'up', '--detach', '--no-deps', '--force-recreate', '--wait', '--wait-timeout', '120', 'web'
+    )
 }
 
 function Test-Smoke {

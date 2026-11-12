@@ -3,6 +3,7 @@ name: halluminate
 x-runtime: &runtime
   init: true
   restart: unless-stopped
+  stop_grace_period: 35s
   read_only: true
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
@@ -79,8 +80,12 @@ services:
     volumes:
       - ../../services/api/target:/app:ro
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m
-    command: [java, -jar, /app/halluminate-api.jar]
+      - /tmp:rw,noexec,nosuid,size=96m
+    command:
+      - sh
+      - -ec
+      - cp /app/halluminate-api.jar /tmp/halluminate-api.jar; exec java -jar
+        /tmp/halluminate-api.jar
     ports:
       - "127.0.0.1:18204:8080"
     depends_on:
@@ -185,7 +190,7 @@ services:
       <<: *api-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:1/unavailable
       SPRING_FLYWAY_ENABLED: "false"
-      SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
+      SPRING_DATASOURCE_HIKARI_INITIALIZATIONFAILTIMEOUT: "-1"
     healthcheck:
       test:
         [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/actuator/health/liveness"]

@@ -34,8 +34,8 @@ the root-level Vite configuration.
 Use Compose project `halluminate`, web port 18104 and API port 18204, both bound to
 127.0.0.1. The DB has no host port. Runtime containers share an internal network;
 API/web additionally use the project's tooling bridge for loopback ingress (D011).
-Resource limits are explicit. Do not inspect/change
-application data in other projects, prune global state, or stop unrelated containers.
+Resource limits are explicit. Do not inspect/change application data in other projects,
+prune global state, or stop unrelated containers.
 
 ## D005 - No Phase 1 message broker or worker
 
@@ -57,7 +57,11 @@ required before production.
 The guide requests repository creation and logical commits. The explicit user
 instruction withholds that approval for Halluminate. Author local files and a CI
 workflow, but do not run `git init`, create remotes, commit or push. Local execution is
-recorded separately from unexecuted hosted CI.
+recorded separately from hosted CI, which this session did not run or verify.
+
+Git metadata appeared concurrently during final inventory validation. The user confirmed
+to leave it untouched and finish the evidence/inventory. No Git state was changed in
+response, and no approval for future Git operations is inferred.
 
 ## D008 - No destructive automatic rollback or cleanup
 
@@ -74,37 +78,64 @@ dashboards and production telemetry are Phase 5 work.
 
 ## D010 - Separate bounded startup from request connection acquisition
 
-The first real PostgreSQL integration run failed: a cold, asynchronous pool with
-zero idle connections could not produce its first connection within the two-second
-request acquisition limit. Tooling-to-DB TCP and password-authenticated `SELECT 1`
-both succeeded, ruling out a missing network path or invalid local secret.
+The first real PostgreSQL integration run failed: a cold, asynchronous pool with zero
+idle connections could not produce its first connection within the two-second request
+acquisition limit. Tooling-to-DB TCP and password-authenticated `SELECT 1` both
+succeeded, ruling out a missing network path or invalid local secret.
 
-Keep one warm connection and allow up to 30 seconds for fail-fast pool startup,
-while preserving the two-second request acquisition limit. The driver also has
-explicit three-second connect and five-second socket timeouts. The deliberately
-unreachable-DB helper alone disables pool startup failure so it can demonstrate
-live-but-not-ready behavior. The backend rerun passed 14 HTTP tests and three real
-PostgreSQL integration tests. The original failed log is retained.
+Keep one warm connection and allow up to 30 seconds for fail-fast pool startup, while
+preserving the two-second request acquisition limit. The driver also has explicit
+three-second connect and five-second socket timeouts. The deliberately unreachable-DB
+helper alone disables pool startup failure so it can demonstrate live-but-not-ready
+behavior. The backend rerun passed 14 HTTP tests and three real PostgreSQL integration
+tests. The original failed log is retained.
 
 ## D011 - Verify effective publishing, not requested port configuration
 
-On this Docker 29.4.1 engine, containers attached exclusively to an internal bridge
-had the requested `HostConfig.PortBindings` but empty effective
-`NetworkSettings.Ports`. Five in-network Chromium checks passed, yet both host
-loopback ports refused connections. This was caught by the host-level gate.
+On this Docker 29.4.1 engine, containers attached exclusively to an internal bridge had
+the requested `HostConfig.PortBindings` but empty effective `NetworkSettings.Ports`.
+Five in-network Chromium checks passed, yet both host loopback ports refused
+connections. This was caught by the host-level gate.
 
 Attach API/web to the existing project-scoped tooling bridge as well, preserving
-explicit 127.0.0.1 bindings and PostgreSQL's internal-only attachment. Do not use host networking,
-relax to 0.0.0.0, publish the DB, or modify daemon/firewall settings. Inspect both
-requested and effective bindings and require actual host HTTP requests to succeed.
+explicit 127.0.0.1 bindings and PostgreSQL's internal-only attachment. Do not use host
+networking, relax to 0.0.0.0, publish the DB, or modify daemon/firewall settings.
+Inspect both requested and effective bindings and require actual host HTTP requests to
+succeed.
 
-Trade-off: API/web now have possible outbound connectivity, although they implement
-no external integrations. Do not claim network-enforced egress denial; future
-untrusted tool execution requires a separately approved isolation design.
+Trade-off: API/web now have possible outbound connectivity, although they implement no
+external integrations. Do not claim network-enforced egress denial; future untrusted
+tool execution requires a separately approved isolation design.
 
-An attempted third, dedicated ingress network hit the shared daemon's exhausted
-default address pool. Reuse Halluminate's existing bridge instead of pruning other
-networks, changing daemon configuration, or guessing a potentially conflicting subnet.
-Halluminate therefore uses exactly two project-scoped networks.
+An attempted third, dedicated ingress network hit the shared daemon's exhausted default
+address pool. Reuse Halluminate's existing bridge instead of pruning other networks,
+changing daemon configuration, or guessing a potentially conflicting subnet. Halluminate
+therefore uses exactly two project-scoped networks.
 
-Reference: [Docker port publishing](https://docs.docker.com/engine/network/port-publishing/).
+Reference:
+[Docker port publishing](https://docs.docker.com/engine/network/port-publishing/).
+
+## D012 - Snapshot the JAR before starting Java on a Windows bind mount
+
+A later complete verification passed both builds and all 22 unit/integration tests, but
+the isolated failure-helper JVM did not reach Spring startup before its health deadline.
+A non-terminating thread dump showed the main thread reading nested JAR entries through
+`UnixFileDispatcherImpl.pread0` and Spring Boot's ZIP loader from the Windows bind
+mount. This was not a database or out-of-memory failure.
+
+Copy the 28,219,852-byte packaged JAR once into a 96 MiB container tmpfs, then
+`exec java` against that startup snapshot. The copy fails explicitly if it cannot
+complete. The tmpfs counts against the unchanged 512 MiB container limit. This avoids
+repeated random cross-filesystem reads and prevents a subsequent host build from
+changing the bytes of a running application's JAR. Startup commands recreate only
+API/web after builds to load the new artifacts.
+
+The original failed verification transcript and JVM diagnostic are retained. After this
+change, the helper's logs showed successful startup and HTTP 200 health responses. One
+retest nevertheless crossed a roughly 20-minute gap in host/engine activity and its
+Compose deadline expired. No application fallback or enlarged timeout was added for that
+interruption.
+
+The subsequent smoke run and the complete `Verify` command both exited 0. The final run
+passed all 27 tests and the host persistence/isolation gate. These are functional
+observations, not startup-performance benchmark claims.

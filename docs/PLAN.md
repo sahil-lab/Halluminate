@@ -7,6 +7,11 @@ Only Phase 0 then Phase 1 are authorized. All three pages of
 implementation. The initial workspace contained only that guide. Git was absent; no Git
 initialization is attempted.
 
+During final inventory validation, Git metadata appeared that had not existed at the
+initial inspection. The user confirmed: leave it untouched and finish the
+evidence/inventory. No Git operation was performed in response; Git metadata is excluded
+from the authored-file inventory.
+
 Docker verification before implementation: Linux engine 29.4.1, Compose v5.1.3, 22
 logical CPUs, 16,467,517,440 bytes of daemon memory; no existing Halluminate Compose
 containers. Shared daemon capacity is not an allocation to this project. The existing
@@ -25,23 +30,55 @@ Phase 0 documents were authored before Phase 1 application code.
 
 ## Phase 1 - working skeleton
 
-- [ ] Bootstrap Java 21 / Spring Boot 3 API and React / TypeScript dashboard.
-- [ ] Add PostgreSQL, Flyway V1, liveness/readiness and secret-file configuration.
-- [ ] Implement strict synthetic probe validation and durable readback.
-- [ ] Wire UI success, loading, unavailable and retry states.
-- [ ] Supply OpenAPI, structured logging and basic browser boundary controls.
-- [ ] Supply bounded Compose tooling/runtime and a reproducible entry script.
-- [ ] Run formatting, compilation, unit/integration tests and Chromium smoke.
-- [ ] Verify actual DB persistence, runtime isolation and failure behavior.
-- [ ] Record exact commands, outcomes, file inventory, limitations and blockers.
+- [x] Bootstrap Java 21 / Spring Boot 3 API and React / TypeScript dashboard.
+- [x] Add PostgreSQL, Flyway V1, liveness/readiness and secret-file configuration.
+- [x] Implement strict synthetic probe validation and durable readback.
+- [x] Wire UI success, loading, unavailable and retry states.
+- [x] Supply OpenAPI, structured logging and basic browser boundary controls.
+- [x] Supply bounded Compose tooling/runtime and a reproducible entry script.
+- [x] Run formatting, compilation, unit/integration tests and Chromium smoke.
+- [x] Verify actual DB persistence, runtime isolation and failure behavior.
+- [x] Record exact commands, outcomes, file inventory, limitations and blockers.
 
 Only executed, successful checks may change these checkboxes. A failing check must be
 corrected and rerun before the slice is marked complete.
 
+Final `scripts/dev.ps1 -Action Verify` exited **0**. The final host persistence gate
+recorded `2026-11-11T19:59:24.6025062Z`. Results: 14 JUnit HTTP tests, three real
+PostgreSQL integration tests, five Vitest tests, and five Chromium E2E tests passed;
+zero failures/errors/skips. Formatting, TypeScript/Vite, Maven packaging, effective
+loopback publishing, resource limits, Flyway V1 and API-restart persistence passed. The
+temporary unavailable-DB helper is stopped. See [exact evidence](VERIFICATION.md).
+
+Cold connection initialization, Docker internal-network port publication, exhausted
+shared address pools, and Windows bind-mounted JAR startup were diagnosed and fixed
+without changing other projects. Earlier failures are retained separately from the
+successful final run. A host-pause timeout was rerun, not suppressed.
+
 ## Verification sequence
 
+### Visual refinement - requested after the Phase 1 baseline
+
+- [x] Replace the starter cards with an original cinematic/editorial visual direction.
+- [x] Bundle the display font locally and implement a pointer-responsive canvas
+      sculpture.
+- [x] Preserve the real probe, readiness, failures and honest feature boundaries.
+- [x] Provide reduced-motion stillness, a play/pause control and keyboard navigation.
+- [x] Compile production assets and pass repository formatting.
+- [x] Pass six frontend tests and seven real Chromium E2E tests, with no skipped tests.
+- [x] Inspect 320/390-pixel mobile, 768-pixel tablet and 1280/1440-pixel desktop
+      behavior.
+- [x] Leave the original API/database processes and all other projects untouched.
+
+The latest frontend/browser reports replace their shared report filenames. The original
+27-test baseline and full verification transcript remain a historical record, not a
+claim that backend unit tests were rerun for this visual-only change. See
+[the visual-refinement evidence](VERIFICATION.md#visual-refinement-follow-up).
+
+### Full stack verification
+
 1. Verify Docker/Compose and generate ignored local secret if missing.
-2. Restore npm dependencies from the checked-in lockfile in Node tooling.
+2. Restore npm dependencies from the project lockfile in Node tooling.
 3. Prettier check, TypeScript/Vite production build, Vitest (one worker).
 4. Start only the Halluminate DB; run Maven Spotless and JUnit against it.
 5. Package the API, start the three runtime services and wait for health.

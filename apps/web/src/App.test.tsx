@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { checkPersistence, type Probe } from "./api";
 
+vi.mock("./SignalField", () => ({
+  SignalField: () => <figure aria-label="Decorative generative artwork" />,
+}));
+
 const probe: Probe = {
   id: "24f678e8-e901-4992-b12a-ac290ea9f2f3",
   fixture: "phase-1-synthetic",
@@ -80,5 +84,34 @@ describe("local skeleton", () => {
         .mockResolvedValueOnce(json({ ...probe, createdAt: "2026-02-01T00:00:00Z" })),
     );
     await expect(checkPersistence()).rejects.toThrow("readback did not match");
+  });
+
+  it("keeps the live console busy until the readback completes", async () => {
+    let completeReadback: (response: Response) => void = () => {
+      throw new Error("The readback request has not started.");
+    };
+    const pending = new Promise<Response>((resolve) => {
+      completeReadback = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ status: "UP" }))
+        .mockResolvedValueOnce(json(probe))
+        .mockReturnValueOnce(pending)
+        .mockResolvedValueOnce(json({ status: "UP" })),
+    );
+    render(<App />);
+    await screen.findByText("API and database ready");
+    fireEvent.click(screen.getByRole("button", { name: "Run synthetic check" }));
+    expect(await screen.findByRole("button", { name: "Verifying..." })).toBeDisabled();
+    expect(
+      screen.getByRole("region", { name: "A little evidence goes a long way." }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText("Persistence verified")).not.toBeInTheDocument();
+    completeReadback(json(probe));
+    expect(await screen.findByText("Persistence verified")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run synthetic check" })).toBeEnabled();
   });
 });

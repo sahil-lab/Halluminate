@@ -25,6 +25,15 @@ test("real browser writes, reads, repeats and renders the synthetic probe", asyn
   );
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByText("API and database ready")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.getByRole("button", { name: "Pause animation" }).click();
+  await page.screenshot({
+    path: ".local/evidence/halluminate-redesign-hero.png",
+  });
+  await page.getByRole("link", { name: "Open live sandbox" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Small test. Real proof." }),
+  ).toBeInViewport();
   await page.getByRole("button", { name: "Run synthetic check" }).click();
   await expect(page.getByText("Persistence verified")).toBeVisible();
   const id = await page.getByTestId("probe-id").textContent();
@@ -45,7 +54,7 @@ test("real browser writes, reads, repeats and renders the synthetic probe", asyn
   expect(await repeated.json()).toEqual(first);
 
   await page.screenshot({
-    path: ".local/evidence/halluminate-desktop.png",
+    path: ".local/evidence/halluminate-redesign-desktop.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -56,14 +65,83 @@ test("real browser writes, reads, repeats and renders the synthetic probe", asyn
         document.documentElement.scrollWidth <= document.documentElement.clientWidth,
     ),
   ).toBe(true);
+  await page.getByRole("link", { name: "Halluminate home" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toBeInViewport();
   await page.screenshot({
-    path: ".local/evidence/halluminate-mobile.png",
+    path: ".local/evidence/halluminate-redesign-mobile.png",
     fullPage: true,
   });
   expect(pageErrors).toEqual([]);
   expect(externalRequests).toEqual([]);
 });
 
+test("reduced motion keeps the artwork still and animation is explicitly controllable", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const field = page.locator(".signal-field");
+  const canvas = field.locator("canvas");
+  await expect(field).toHaveAttribute("data-motion", "paused");
+  await canvas.scrollIntoViewIfNeeded();
+  const first = await canvas.screenshot();
+  await page.waitForTimeout(250);
+  expect((await canvas.screenshot()).equals(first)).toBe(true);
+  expect(
+    await page.evaluate(
+      () =>
+        document
+          .getAnimations()
+          .filter((animation) => animation.playState === "running").length,
+    ),
+  ).toBe(0);
+
+  await page.getByRole("button", { name: "Play animation" }).click();
+  await expect(field).toHaveAttribute("data-motion", "playing");
+  await expect.poll(async () => (await canvas.screenshot()).equals(first)).toBe(false);
+  await page.getByRole("button", { name: "Pause animation" }).click();
+  await expect(field).toHaveAttribute("data-motion", "paused");
+  const paused = await canvas.screenshot();
+  await page.waitForTimeout(250);
+  expect((await canvas.screenshot()).equals(paused)).toBe(true);
+});
+
+test("keyboard navigation reaches the real sandbox and the narrow layout does not overflow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip to live sandbox" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#workspace")).toBeFocused();
+  await expect(
+    page.getByRole("heading", { name: "Small test. Real proof." }),
+  ).toBeInViewport();
+  expect(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Run synthetic check" }).click();
+  await expect(page.getByText("Persistence verified")).toBeVisible();
+  const clippedControls = await page
+    .locator("button, .main-nav a, .hero-actions a")
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => {
+          const bounds = element.getBoundingClientRect();
+          return (
+            bounds.width > 0 &&
+            (bounds.left < 0 || bounds.right > document.documentElement.clientWidth + 1)
+          );
+        })
+        .map((element) => element.textContent),
+    );
+  expect(clippedControls).toEqual([]);
+});
 test("live API rejects invalid input with correlated, non-sensitive Problem Details", async ({
   request,
 }) => {
