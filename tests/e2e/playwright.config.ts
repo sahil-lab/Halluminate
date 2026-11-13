@@ -6,7 +6,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 30_000,
+  // WebGL frames are software-rendered inside a one-CPU container, so a whole test may
+  // take a while. Each assertion still has to pass within the expect timeout below.
+  timeout: 60_000,
   expect: {
     timeout: 10_000,
   },

@@ -1,13 +1,81 @@
-import { useEffect, useState } from "react";
-import { checkPersistence, checkReadiness, type Probe } from "./api";
-import { SignalField } from "./SignalField";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import {
+  checkPersistence,
+  checkReadiness,
+  type Probe,
+  type RoundTripStage,
+} from "./api";
+import { Experience } from "./experience/Experience";
+import { announceVerified } from "./experience/signals";
 
 type Health = "checking" | "ready" | "unavailable";
+type StepState = "idle" | "active" | "done" | "failed";
 type Check =
   | { status: "idle" }
-  | { status: "running" }
+  | { status: "running"; stage: RoundTripStage }
   | { status: "passed"; probe: Probe }
-  | { status: "failed"; message: string };
+  | { status: "failed"; stage: RoundTripStage; message: string };
+
+const STEPS: readonly { stage: RoundTripStage; verb: string; detail: string }[] = [
+  { stage: "write", verb: "Write", detail: "POST /api/bootstrap/probes" },
+  { stage: "read", verb: "Read", detail: "GET /api/bootstrap/probes/{id}" },
+  { stage: "compare", verb: "Compare", detail: "id · fixture · createdAt" },
+];
+
+const STEP_LABEL: Record<StepState, string> = {
+  idle: "Waiting",
+  active: "In flight",
+  done: "Confirmed",
+  failed: "Stopped here",
+};
+
+const CHAPTERS = [
+  {
+    lead: "Isolate",
+    rest: "the",
+    accent: "world.",
+    body: "The vision: disposable task worlds. A controlled place to explore, without consequences for the real one.",
+    tag: "Planned · Task worlds",
+    side: "left",
+  },
+  {
+    lead: "Follow",
+    rest: "the",
+    accent: "thought.",
+    body: "The vision: action traces and snapshots. Turn an opaque outcome into a sequence worth understanding.",
+    tag: "Planned · Traces and snapshots",
+    side: "left",
+  },
+  {
+    lead: "Return",
+    rest: "to the",
+    accent: "why.",
+    body: "The vision: deterministic grading and replay. Revisit the turning point, not just the final answer.",
+    tag: "Planned · Grading and replay",
+    side: "right",
+  },
+] as const;
+
+const STATEMENT =
+  "When an agent takes the *unexpected* path, the interesting question isn't only what happened. It's whether you can go back, watch it happen *again,* and understand *why.*".split(
+    " ",
+  );
+
+const BUILT = [
+  "React and TypeScript interface",
+  "Java 21 and Spring Boot 3 API",
+  "PostgreSQL with Flyway migrations",
+  "Strict validation and live health checks",
+  "A real write, readback and comparison",
+];
+
+const HORIZON = [
+  "Disposable task worlds",
+  "Action traces and snapshots",
+  "Deterministic grading",
+  "Replay and first divergence",
+  "Reproducible benchmarks",
+];
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -16,15 +84,74 @@ function errorMessage(error: unknown): string {
   return "An unexpected error prevented the check. Inspect local API logs.";
 }
 
+function stepState(check: Check, stage: RoundTripStage): StepState {
+  if (check.status === "idle") return "idle";
+  if (check.status === "passed") return "done";
+  const position = STEPS.findIndex((step) => step.stage === stage);
+  const reached = STEPS.findIndex((step) => step.stage === check.stage);
+  if (position < reached) return "done";
+  if (position > reached) return "idle";
+  return check.status === "failed" ? "failed" : "active";
+}
+
 function Arrow({ diagonal = false }: { diagonal?: boolean }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="arrow-icon">
       <path
-        d={diagonal ? "M5 19 19 5M5 5h14v14" : "M4 12h16m-7-7 7 7-7 7"}
+        d={diagonal ? "M6 18 18 6M8 6h10v10" : "M4 12h16m-6-6 6 6-6 6"}
         stroke="currentColor"
         strokeWidth="1.5"
       />
     </svg>
+  );
+}
+
+function Spark() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="spark">
+      <path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19" stroke="currentColor" />
+    </svg>
+  );
+}
+
+/** A masked line of display type that slides into place. */
+function Line({ index = 0, children }: { index?: number; children: ReactNode }) {
+  return (
+    <span className="line">
+      <span className="line-inner" style={{ "--i": index } as CSSProperties}>
+        {children}
+      </span>
+    </span>
+  );
+}
+
+function Marquee({
+  words,
+  direction,
+  outline = false,
+}: {
+  words: readonly string[];
+  direction: 1 | -1;
+  outline?: boolean;
+}) {
+  return (
+    <div
+      className={outline ? "marquee-row marquee-outline" : "marquee-row"}
+      data-marquee={direction}
+    >
+      <div className="marquee-track">
+        {[0, 1, 2].map((copy) => (
+          <span className="marquee-group" key={copy}>
+            {words.map((word) => (
+              <span key={word}>
+                {word}
+                <Spark />
+              </span>
+            ))}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -50,23 +177,37 @@ export function App() {
   }, []);
 
   async function runCheck() {
-    setCheck({ status: "running" });
+    let stage: RoundTripStage = "write";
+    setCheck({ status: "running", stage });
     try {
-      const probe = await checkPersistence();
+      const probe = await checkPersistence((next) => {
+        stage = next;
+        setCheck({ status: "running", stage: next });
+      });
       setCheck({ status: "passed", probe });
+      announceVerified();
     } catch (error: unknown) {
-      setCheck({ status: "failed", message: errorMessage(error) });
+      setCheck({ status: "failed", stage, message: errorMessage(error) });
     }
     await refreshHealth();
   }
+
+  const running = check.status === "running";
 
   return (
     <div className="site-shell" id="top">
       <a className="skip-link" href="#workspace">
         Skip to live sandbox
       </a>
-      <header className="site-header page-gutter">
-        <a className="brand" href="#top" aria-label="Halluminate home">
+      <Experience />
+
+      <header className="site-header">
+        <a
+          className="brand"
+          href="#top"
+          aria-label="Halluminate home"
+          data-cursor="Home"
+        >
           <svg
             className="brand-symbol"
             viewBox="0 0 36 36"
@@ -75,296 +216,304 @@ export function App() {
           >
             <path d="M8 3v30M28 3v30M8 18h20M13 8l10 20M23 8 13 28" />
           </svg>
-          <span>
-            halluminate<span className="brand-period">.</span>
-          </span>
+          <span>halluminate.</span>
         </a>
         <nav className="main-nav" aria-label="Main navigation">
-          <a href="#concept">
-            The idea <span>01</span>
+          <a href="#concept" data-cursor="Read">
+            The idea
           </a>
-          <a href="#workspace">
-            Live sandbox <Arrow diagonal />
+          <a href="#workspace" data-cursor="Open">
+            Live sandbox
           </a>
         </nav>
-        <div className={`header-status health-${health}`}>
+        <p className={`header-status health-${health}`}>
           <span className="status-dot" aria-hidden="true" />
-          <span>LOCAL ENVIRONMENT</span>
-        </div>
+          {health === "ready" && "Local stack ready"}
+          {health === "checking" && "Checking local stack"}
+          {health === "unavailable" && "Local stack unavailable"}
+        </p>
       </header>
 
       <main>
-        <section className="hero page-gutter" aria-labelledby="page-title">
-          <div className="hero-copy">
-            <p className="eyebrow hero-eyebrow">
-              <span className="tiny-star" aria-hidden="true">
-                +
-              </span>
-              INTELLIGENCE DESERVES UNDERSTANDING
-            </p>
-            <h1 id="page-title">
-              <span>Make the</span>
-              <span>unknown</span>
-              <span className="accent-word">
-                repeatable<span className="title-period">.</span>
-              </span>
-            </h1>
-            <p className="hero-description">
-              A new perspective on agent evaluation.
-              <br />
-              An independent experiment in making complex behavior something we can
-              understand.
-            </p>
-            <div className="hero-actions">
-              <a className="button button-accent" href="#workspace">
-                Open live sandbox <Arrow diagonal />
-              </a>
-              <a className="text-link" href="#concept">
-                Meet the idea <span aria-hidden="true">+</span>
-              </a>
+        <section className="hero" data-hero aria-labelledby="page-title">
+          <div className="hero-inner">
+            <div className="hero-heading">
+              <p className="eyebrow">
+                <Spark />
+                Intelligence deserves understanding
+              </p>
+              <h1 id="page-title" className="hero-title">
+                <Line index={0}>Make the</Line>{" "}
+                <Line index={1}>
+                  <em>unknown</em>
+                </Line>{" "}
+                <Line index={2}>
+                  repeatable<span className="accent-dot">.</span>
+                </Line>
+              </h1>
+            </div>
+            <div className="hero-aside">
+              <p className="hero-description">
+                A new perspective on agent evaluation: an independent experiment in
+                making complex behavior something you can watch, question and repeat.
+              </p>
+              <div className="hero-actions">
+                <a
+                  className="button"
+                  href="#workspace"
+                  data-magnetic
+                  data-cursor="Open"
+                >
+                  <span>Open live sandbox</span>
+                  <span className="button-icon">
+                    <Arrow diagonal />
+                  </span>
+                </a>
+                <a className="text-link" href="#concept" data-cursor="Read">
+                  Meet the idea
+                </a>
+              </div>
             </div>
           </div>
-          <SignalField />
-          <div className="hero-baseline">
+          <div className="hero-foot">
             <a className="scroll-cue" href="#concept">
-              <span className="scroll-arrow" aria-hidden="true">
-                <Arrow />
-              </span>
-              SCROLL TO DISCOVER
+              <span className="scroll-line" aria-hidden="true" />
+              Scroll to explore
             </a>
-            <span>
-              INDEPENDENT PROTOTYPE <span className="baseline-divider">/</span> CHAPTER
-              001
+            <span className="field-note field-note-live">
+              Generative artwork. Not evaluation data.
             </span>
+            <span className="field-note field-note-static">
+              Static backdrop. The live field could not start in this browser.
+            </span>
+            <span className="hero-foot-end">Independent prototype / Phase 01</span>
           </div>
         </section>
 
         <section
-          className="concept page-gutter"
+          className="story"
           id="concept"
-          aria-labelledby="concept-heading"
+          data-story
+          aria-labelledby="story-heading"
         >
-          <div className="section-index">
-            <span>01 / THE IDEA</span>
-            <span>A NORTH STAR, NOT A FEATURE CLAIM</span>
-          </div>
-          <div className="concept-intro">
-            <h2 id="concept-heading">
-              Less black box.
-              <br />
-              <span>More understanding.</span>
-            </h2>
-            <p>
-              When agents take the unexpected path, the interesting question isn't just{" "}
-              <em>what happened.</em> It's whether we can understand it, learn from it,
-              and follow that path again.
-            </p>
-          </div>
-          <div className="principles">
-            <article className="principle">
-              <div className="principle-visual">
-                <svg viewBox="0 0 240 110" fill="none" aria-hidden="true">
-                  <path d="M66 20h108v70H66zM46 35h148v40H46zM88 4h64v102H88z" />
-                  <path className="diagram-accent" d="M108 43h24v24h-24z" />
-                  <path d="M16 55h30m148 0h30M120 0v4m0 102v4" strokeDasharray="2 4" />
-                </svg>
-                <span>01</span>
-              </div>
-              <h3>Isolate the world.</h3>
-              <p>
-                The vision: disposable task worlds. A controlled place to explore,
-                without consequences for the real one.
-              </p>
-              <span className="future-label">PLANNED / TASK WORLDS</span>
-            </article>
-            <article className="principle">
-              <div className="principle-visual">
-                <svg viewBox="0 0 240 110" fill="none" aria-hidden="true">
-                  <path d="M23 78 71 35l49 38 48-48 49 31M23 93V20m48 73V20m49 73V20m48 73V20m49 73V20" />
-                  <circle cx="71" cy="35" r="5" className="diagram-accent" />
-                  <circle cx="168" cy="25" r="5" className="diagram-accent" />
-                  <path d="M23 94h194" strokeDasharray="2 4" />
-                </svg>
-                <span>02</span>
-              </div>
-              <h3>Follow the thought.</h3>
-              <p>
-                The vision: action traces and snapshots. Turn an opaque outcome into a
-                sequence worth understanding.
-              </p>
-              <span className="future-label">PLANNED / OBSERVABILITY</span>
-            </article>
-            <article className="principle">
-              <div className="principle-visual">
-                <svg viewBox="0 0 240 110" fill="none" aria-hidden="true">
-                  <circle cx="120" cy="55" r="37" />
-                  <circle cx="120" cy="55" r="24" strokeDasharray="2 4" />
-                  <path d="M83 55H45m150 0h-38M120 18V4m0 102V92" />
-                  <path
-                    className="diagram-accent"
-                    d="m151 26 7 17-18-3M109 45l20 10-20 10Z"
-                  />
-                </svg>
-                <span>03</span>
-              </div>
-              <h3>Return to the why.</h3>
-              <p>
-                The vision: deterministic grading and replay. Revisit the turning point,
-                not just the final answer.
-              </p>
-              <span className="future-label">PLANNED / REPLAY</span>
-            </article>
-          </div>
-          <div className="concept-footnote">
-            <span className="tiny-star" aria-hidden="true">
-              +
-            </span>
-            <p>
-              Big questions. An honest starting point. The live experiment below
-              verifies the foundation; these capabilities come later.
-            </p>
+          <div className="story-pin">
+            <div className="story-head">
+              <h2 id="story-heading">The idea</h2>
+              <span>A north star, not a feature claim</span>
+              <span className="story-count" aria-hidden="true">
+                <span data-story-index>01</span> / 03
+              </span>
+            </div>
+            <div className="story-rail" data-story-rail aria-hidden="true">
+              <span />
+            </div>
+            <ol className="chapters">
+              {CHAPTERS.map((chapter, index) => (
+                <li
+                  className="chapter"
+                  key={chapter.lead}
+                  data-chapter
+                  data-side={chapter.side}
+                  data-state={index === 0 ? "active" : "after"}
+                >
+                  <span className="chapter-number" aria-hidden="true">
+                    Chapter 0{index + 1}
+                  </span>
+                  <h3>
+                    <Line index={0}>{chapter.lead}</Line>{" "}
+                    <Line index={1}>
+                      {chapter.rest} <em>{chapter.accent}</em>
+                    </Line>
+                  </h3>
+                  <p>{chapter.body}</p>
+                  <span className="tag">{chapter.tag}</span>
+                </li>
+              ))}
+            </ol>
           </div>
         </section>
 
+        <div className="cover" data-cover>
+          <section className="premise" aria-labelledby="premise-heading">
+            <div className="section-label">
+              <span>01</span>
+              <h2 id="premise-heading">The premise</h2>
+              <span>Why replay matters</span>
+            </div>
+            <p className="statement" data-words>
+              {STATEMENT.map((token, index) => {
+                const marked = token.startsWith("*");
+                return (
+                  <span key={index} data-word>
+                    {marked ? <em>{token.slice(1, -1)}</em> : token}{" "}
+                  </span>
+                );
+              })}
+            </p>
+            <div className="ledger">
+              <div className="ledger-column" data-reveal="rise">
+                <h3>
+                  <span className="ledger-dot ledger-real" aria-hidden="true" />
+                  Built and locally verified
+                </h3>
+                <ol>
+                  {BUILT.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ol>
+              </div>
+              <div className="ledger-column" data-reveal="rise">
+                <h3>
+                  <span className="ledger-dot" aria-hidden="true" />
+                  On the horizon, not implemented
+                </h3>
+                <ol>
+                  {HORIZON.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+          </section>
+          <div className="marquees" data-marquees aria-hidden="true">
+            <Marquee words={["Write", "Read", "Compare", "Repeat"]} direction={1} />
+            <Marquee
+              words={[
+                "No fabricated results",
+                "Fictional data only",
+                "Local by design",
+              ]}
+              direction={-1}
+              outline
+            />
+          </div>
+        </div>
+
         <section
-          className="workspace page-gutter"
+          className="sandbox"
           id="workspace"
+          data-sandbox
           aria-labelledby="workspace-heading"
           tabIndex={-1}
         >
-          <div className="section-index">
-            <span>02 / THE LIVE SANDBOX</span>
-            <span className="chapter-tag">
-              PHASE 01 &nbsp; / &nbsp; WORKING SKELETON
-            </span>
+          <div className="section-label">
+            <span>02</span>
+            <span>The live sandbox</span>
+            <span>Phase 01 / Working skeleton</span>
           </div>
-          <div className="workspace-intro">
-            <h2 id="workspace-heading">
-              Small test.
-              <br />
-              <span>Real proof.</span>
-            </h2>
-            <p>
-              No simulated success. Send a fixed fictional fixture through the running
-              stack. Write it. Read it. Verify it.
-            </p>
-          </div>
-
-          <div className="workspace-grid">
-            <section className="system-panel" aria-labelledby="system-heading">
-              <p className="eyebrow">THE CONNECTION</p>
-              <h3 id="system-heading">
-                Three layers.
-                <br />
-                One round trip.
-              </h3>
-              <div className={`health-state health-${health}`} role="status">
-                <span className="status-dot" aria-hidden="true" />
-                {health === "checking" && "Checking local services..."}
-                {health === "ready" && "API and database ready"}
-                {health === "unavailable" && "Local services unavailable"}
-              </div>
-              {health === "unavailable" && (
-                <p className="health-error" role="alert">
-                  {healthError}
-                </p>
-              )}
-              <ol className="service-list">
-                <li>
-                  <span className="service-number">01</span>
-                  <div>
+          <div className="sandbox-grid">
+            <div className="sandbox-intro">
+              <h2 id="workspace-heading" data-reveal="lines">
+                <Line index={0}>Small test.</Line>{" "}
+                <Line index={1}>
+                  <em>Real</em> proof.
+                </Line>
+              </h2>
+              <p className="sandbox-lede" data-reveal="rise">
+                No simulated success. Send one fixed fictional fixture through the
+                running stack. Write it. Read it back. Compare.
+              </p>
+              <div className="system" data-reveal="rise">
+                <div className={`health health-${health}`} role="status">
+                  <span className="status-dot" aria-hidden="true" />
+                  {health === "checking" && "Checking local services..."}
+                  {health === "ready" && "API and database ready"}
+                  {health === "unavailable" && "Local services unavailable"}
+                </div>
+                {health === "unavailable" && (
+                  <p className="health-error" role="alert">
+                    {healthError}
+                  </p>
+                )}
+                <ol className="layers">
+                  <li>
+                    <span>01</span>
                     <strong>Interface</strong>
                     <span>React + TypeScript</span>
-                  </div>
-                  <span className="service-marker" aria-hidden="true">
-                    /
-                  </span>
-                </li>
-                <li>
-                  <span className="service-number">02</span>
-                  <div>
+                  </li>
+                  <li>
+                    <span>02</span>
                     <strong>Orchestration</strong>
                     <span>Java 21 / Spring Boot 3</span>
-                  </div>
-                  <span className="service-marker" aria-hidden="true">
-                    /
-                  </span>
-                </li>
-                <li>
-                  <span className="service-number">03</span>
-                  <div>
+                  </li>
+                  <li>
+                    <span>03</span>
                     <strong>Persistence</strong>
                     <span>PostgreSQL / Flyway</span>
-                  </div>
-                  <span className="service-marker" aria-hidden="true">
-                    /
-                  </span>
-                </li>
-              </ol>
-              <button
-                className="text-button"
-                onClick={() => void refreshHealth()}
-                disabled={health === "checking" || check.status === "running"}
-              >
-                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <path d="M16 9a6 6 0 1 0-1 4M16 3v6h-6" />
-                </svg>
-                Refresh readiness
-              </button>
-              <p className="panel-note">
-                Readiness queries the live database.
-                <br />
-                No accounts. No external integrations.
-              </p>
-            </section>
+                  </li>
+                </ol>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void refreshHealth()}
+                  disabled={health === "checking" || running}
+                >
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M16 9a6 6 0 1 0-1 4M16 3v6h-6" />
+                  </svg>
+                  Refresh readiness
+                </button>
+              </div>
+            </div>
 
             <section
-              className={`probe-console check-${check.status}`}
+              className="console"
               aria-labelledby="probe-heading"
-              aria-busy={check.status === "running"}
+              aria-busy={running}
+              data-check={check.status}
+              data-reveal="rise"
             >
               <div className="console-bar">
-                <span>
-                  <span className="console-indicator" aria-hidden="true" /> halluminate
-                  / bootstrap
+                <span className="console-lights" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
                 </span>
-                <span>LOCAL ONLY</span>
+                <span>halluminate / bootstrap</span>
+                <span>Local only</span>
               </div>
               <div className="console-body">
-                <div className="console-title">
-                  <div>
-                    <p className="eyebrow">PERSISTENCE PROBE</p>
-                    <h3 id="probe-heading">A little evidence goes a long way.</h3>
-                  </div>
-                  <span className="probe-symbol" aria-hidden="true">
-                    <Arrow diagonal />
-                  </span>
-                </div>
-                <div className="request-preview">
-                  <div className="request-route">
+                <p className="eyebrow">Persistence probe</p>
+                <h3 id="probe-heading">A little evidence goes a long way.</h3>
+                <div className="request">
+                  <div className="request-line">
                     <span>POST</span>
                     <code>/api/bootstrap/probes</code>
                   </div>
                   <pre>
                     <code>
-                      <span className="code-bracket">{"{"}</span>
-                      {"\n"} <span className="code-key">"fixture"</span>:{" "}
+                      {"{ "}
+                      <span className="code-key">"fixture"</span>
+                      {": "}
                       <span className="code-value">"phase-1-synthetic"</span>
-                      {"\n"}
-                      <span className="code-bracket">{"}"}</span>
+                      {" }"}
                     </code>
                   </pre>
-                  <span className="request-note">
-                    ONE FICTIONAL FIXTURE. ALWAYS THE SAME RECORD.
-                  </span>
                 </div>
+                <ol className="roundtrip" aria-label="Round trip">
+                  {STEPS.map((step, index) => {
+                    const state = stepState(check, step.stage);
+                    return (
+                      <li key={step.stage} data-state={state}>
+                        <span className="roundtrip-index" aria-hidden="true">
+                          0{index + 1}
+                        </span>
+                        <span className="roundtrip-verb">{step.verb}</span>
+                        <code>{step.detail}</code>
+                        <span className="roundtrip-status">{STEP_LABEL[state]}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
                 <button
-                  className="button button-accent run-button"
+                  type="button"
+                  className="run-button"
+                  data-cursor="Run"
                   onClick={() => void runCheck()}
-                  disabled={check.status === "running"}
+                  disabled={running}
                 >
-                  {check.status === "running" ? "Verifying..." : "Run synthetic check"}
-                  {check.status === "running" ? (
+                  <span>{running ? "Verifying..." : "Run synthetic check"}</span>
+                  {running ? (
                     <span className="working-indicator" aria-hidden="true" />
                   ) : (
                     <Arrow />
@@ -372,21 +521,16 @@ export function App() {
                 </button>
                 <div className="check-output" aria-live="polite" aria-atomic="true">
                   {check.status === "idle" && (
-                    <div className="idle-output">
-                      <span aria-hidden="true">[ &nbsp; ]</span>
-                      <p>
-                        Ready when you are.
-                        <br />
-                        <span>No check run in this browser session.</span>
-                      </p>
-                    </div>
+                    <p className="idle-output">
+                      Ready when you are. No check has run in this browser session.
+                    </p>
                   )}
-                  {check.status === "running" && (
+                  {running && (
                     <p className="running-output">Writing and reading the fixture...</p>
                   )}
                   {check.status === "failed" && (
                     <div role="alert" className="error-output">
-                      <span className="result-label">REQUEST UNSUCCESSFUL</span>
+                      <span className="result-label">Request unsuccessful</span>
                       <strong>Check failed</strong>
                       <p>{check.message}</p>
                       <span>No success recorded. You can try again.</span>
@@ -395,8 +539,8 @@ export function App() {
                   {check.status === "passed" && (
                     <div className="success-output">
                       <span className="result-label">
-                        <span className="status-dot" aria-hidden="true" /> WRITE +
-                        READBACK MATCHED
+                        <span className="status-dot" aria-hidden="true" />
+                        Write and readback matched
                       </span>
                       <strong>Persistence verified</strong>
                       <dl>
@@ -409,41 +553,36 @@ export function App() {
                   )}
                 </div>
               </div>
-              <div className="console-footer">
-                <span>
-                  POST <span aria-hidden="true">&rarr;</span> GET{" "}
-                  <span aria-hidden="true">&rarr;</span> COMPARE
-                </span>
-                <span>NO FABRICATED RESULTS</span>
-              </div>
             </section>
           </div>
-          <aside className="scope-note">
-            <span className="scope-label">A NOTE ON SCOPE</span>
-            <p>
-              A foundation, not a finished engine. Task worlds, runs, traces, snapshots,
-              grading, replay, and benchmarks are not implemented here.
-            </p>
-            <span className="scope-asterisk" aria-hidden="true">
-              *
-            </span>
-          </aside>
+          <p className="scope-note" data-reveal="rise">
+            <span>A note on scope</span>A foundation, not a finished engine. Task
+            worlds, runs, traces, snapshots, grading, replay and benchmarks are not
+            implemented here.
+          </p>
         </section>
       </main>
 
-      <footer className="site-footer page-gutter">
-        <div className="footer-top">
-          <span>THE FUTURE IS WORTH UNDERSTANDING.</span>
-          <a href="#top" className="back-to-top">
-            Back to the beginning <Arrow diagonal />
+      <footer className="site-footer" data-footer>
+        <div className="footer-top" data-reveal="rise">
+          <p>
+            The future is worth <em>understanding.</em>
+          </p>
+          <a className="round-link" href="#top" data-magnetic data-cursor="Top">
+            <span>Back to the beginning</span>
+            <Arrow diagonal />
           </a>
         </div>
-        <div className="footer-wordmark" aria-hidden="true">
-          halluminate<span>.</span>
+        <div className="footer-wordmark" aria-hidden="true" data-reveal="letters">
+          {"halluminate.".split("").map((letter, index) => (
+            <span key={index} style={{ "--i": index } as CSSProperties}>
+              {letter}
+            </span>
+          ))}
         </div>
-        <div className="footer-bottom">
+        <div className="footer-meta">
           <span>Independent prototype. Not affiliated with Halluminate.</span>
-          <span>BUILT FOR CURIOSITY. BOUNDED BY DESIGN.</span>
+          <span>Local only / Fictional data / Phase 01</span>
         </div>
       </footer>
     </div>

@@ -57,7 +57,35 @@ successful final run. A host-pause timeout was rerun, not suppressed.
 
 ## Verification sequence
 
-### Visual refinement - requested after the Phase 1 baseline
+### Cinematic rebuild - requested after the visual refinement
+
+The visual refinement below was not the experience the user asked for. The front end was
+rebuilt; the previous sources are kept in the ignored `.local/ui-v2-backup` folder.
+
+- [x] Draw one WebGL2 particle field with five formations, tone mapping and a soft glow.
+- [x] Drive the formations, a pinned three-chapter story, the word-by-word premise and
+      the marquee from scroll, using native scrolling.
+- [x] Rebuild the page: opening counter, hero, story, premise, glass sandbox console,
+      footer wave field, cursor label and magnetic controls.
+- [x] Show the real write, read and compare stages, and attribute a failure to its
+      stage.
+- [x] Keep the artwork and planned capabilities labelled; keep the API behaviour as is.
+- [x] Pause control, reduced-motion start, static fallback without WebGL2.
+- [x] Step quality down when frames stay slow; hold the field still on emulated
+      renderers.
+- [x] Pass formatting, the production build, 12 unit tests and 10 real Chromium tests.
+- [x] Measure frame pacing and inspect the result on this machine's GPU in headless
+      Edge.
+- [x] Inspect desktop, 390-pixel and 320-pixel layouts, the opening sequence and live
+      states.
+- [x] Leave the API, database, Compose topology, Git metadata and other projects
+      untouched.
+
+Backend sources are unchanged and backend unit tests were not rerun for this front-end
+change. See [the cinematic rebuild record](VERIFICATION.md#cinematic-rebuild) and
+decisions D013 and D014.
+
+### Visual refinement - requested after the Phase 1 baseline (superseded)
 
 - [x] Replace the starter cards with an original cinematic/editorial visual direction.
 - [x] Bundle the display font locally and implement a pointer-responsive canvas
@@ -72,7 +100,9 @@ successful final run. A host-pause timeout was rerun, not suppressed.
 
 The latest frontend/browser reports replace their shared report filenames. The original
 27-test baseline and full verification transcript remain a historical record, not a
-claim that backend unit tests were rerun for this visual-only change. See
+claim that backend unit tests were rerun for this visual-only change. This refinement's
+canvas artwork and layout were replaced by the cinematic rebuild above; its record is
+kept as history in
 [the visual-refinement evidence](VERIFICATION.md#visual-refinement-follow-up).
 
 ### Full stack verification

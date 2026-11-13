@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { checkPersistence, type Probe } from "./api";
 
-vi.mock("./SignalField", () => ({
-  SignalField: () => <figure aria-label="Decorative generative artwork" />,
+// The decorative WebGL layer needs a real browser; it is covered end to end.
+vi.mock("./experience/Experience", () => ({
+  Experience: () => null,
 }));
 
 const probe: Probe = {
@@ -110,8 +111,38 @@ describe("local skeleton", () => {
       screen.getByRole("region", { name: "A little evidence goes a long way." }),
     ).toHaveAttribute("aria-busy", "true");
     expect(screen.queryByText("Persistence verified")).not.toBeInTheDocument();
+    const steps = within(screen.getByRole("list", { name: "Round trip" }));
+    await waitFor(() =>
+      expect(steps.getAllByRole("listitem")[1]).toHaveTextContent("In flight"),
+    );
+    expect(steps.getAllByRole("listitem")[0]).toHaveTextContent("Confirmed");
     completeReadback(json(probe));
     expect(await screen.findByText("Persistence verified")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run synthetic check" })).toBeEnabled();
+  });
+
+  it("attributes a failed readback to the stage that stopped", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ status: "UP" }))
+        .mockResolvedValueOnce(json(probe))
+        .mockResolvedValueOnce(
+          json({ detail: "Bootstrap probe was not found.", requestId: "read-id" }, 404),
+        )
+        .mockResolvedValueOnce(json({ status: "UP" })),
+    );
+    render(<App />);
+    await screen.findByText("API and database ready");
+    fireEvent.click(screen.getByRole("button", { name: "Run synthetic check" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("read-id");
+    const [write, read, compare] = within(
+      screen.getByRole("list", { name: "Round trip" }),
+    ).getAllByRole("listitem");
+    expect(write).toHaveTextContent("Confirmed");
+    expect(read).toHaveTextContent("Stopped here");
+    expect(compare).toHaveTextContent("Waiting");
+    expect(screen.queryByText("Persistence verified")).not.toBeInTheDocument();
   });
 });

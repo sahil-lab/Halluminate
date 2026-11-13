@@ -59,7 +59,13 @@ export async function checkReadiness(): Promise<void> {
   }
 }
 
-export async function checkPersistence(): Promise<Probe> {
+export type RoundTripStage = "write" | "read" | "compare";
+
+/** Reports each stage as it actually begins, so a failure can be attributed to it. */
+export async function checkPersistence(
+  onStage: (stage: RoundTripStage) => void = () => {},
+): Promise<Probe> {
+  onStage("write");
   const written = parseProbe(
     await request("/api/bootstrap/probes", {
       method: "POST",
@@ -67,7 +73,9 @@ export async function checkPersistence(): Promise<Probe> {
       body: JSON.stringify({ fixture: "phase-1-synthetic" }),
     }),
   );
+  onStage("read");
   const read = parseProbe(await request(`/api/bootstrap/probes/${written.id}`));
+  onStage("compare");
   if (
     read.id !== written.id ||
     read.fixture !== written.fixture ||

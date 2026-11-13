@@ -21,21 +21,36 @@ actual loopback access, and persistence across API recreation. See
 
 ## The visual experience
 
-The redesigned interface pairs oversized editorial typography with an original,
-pointer-responsive luminous field, a contrasting concept section, and a live persistence
-console. Space Grotesk is bundled locally under the OFL-1.1 license; no font CDN, remote
-artwork, video, tracking, or graphics framework is used.
+The front end is a scroll-driven page built around one generative particle field, drawn
+with hand-written WebGL2 and no graphics library. As you scroll, the same 56,000
+particles re-form: an orb in the hero, a world held inside a cube, a branching trace, a
+knot, and a wave field behind the footer. Around it sit a pinned three-chapter story, a
+premise that lights up word by word, a marquee that reacts to scroll speed, a cursor
+label, and a short opening counter. The live sandbox is a glass console that shows the
+real write, read and compare stages as they happen, and sends a pulse through the field
+only when a round trip is actually verified.
 
-The decorative artwork is explicitly not evaluation data. Motion is capped at 30 frames
-per second, pauses offscreen or when the tab is hidden, and defaults to a still image
-with reduced-motion preferences. A visible play/pause control, keyboard skip link,
-native section navigation, and responsive layouts preserve access to the actual working
-sandbox.
+The field is artwork and is labelled "Generative artwork. Not evaluation data." The
+three story chapters describe planned capabilities and are tagged "Planned"; the premise
+section lists what is built next to what is not implemented.
 
-This frontend-only refinement passed six frontend tests and seven real Chromium E2E
-tests, including persistence, failure/retry, 320-pixel keyboard access, and
-pixel-identical reduced-motion frames. Desktop, tablet, and mobile screenshots were
-inspected. The backend and Phase 2 boundary are unchanged.
+- **Motion control.** A fixed button pauses all motion. A reduced-motion preference
+  starts the page paused and skips the opening sequence. While paused, formations still
+  change with scroll, without travel between them.
+- **Slow renderers.** If frames stay slow, the field steps down through four quality
+  levels. On a software-emulated renderer it shows still formations from the start, so
+  the rest of the page stays responsive. Without WebGL2 a static gradient replaces the
+  field and the page says so.
+- **Pinning a level.** `?quality=high`, `medium`, `low` or `minimal` fixes the level and
+  turns the automatic adjustment off.
+- **Assets.** Space Grotesk and Instrument Serif are bundled locally under OFL-1.1. No
+  CDN, remote asset, tracking or analytics is used, and the content security policy is
+  unchanged.
+
+This front-end rebuild passed 12 unit tests and 10 real Chromium tests, and was checked
+on this machine's GPU in headless Edge. The API, database and Phase 2 boundary are
+unchanged. Results, measurements and the changed files are in
+[the cinematic rebuild record](docs/VERIFICATION.md#cinematic-rebuild).
 
 ## Local development
 
@@ -114,11 +129,16 @@ checks and was left untouched as instructed.
 ## Local walkthrough and troubleshooting
 
 1. Run `Verify`, then open <http://localhost:18104>.
-2. Confirm "API and database ready".
-3. Click "Run synthetic check" and inspect the persisted ID.
-4. Repeat the check: the ID and creation time remain unchanged. This demonstrates
+2. Scroll through the three chapters, then follow "Open live sandbox".
+3. Confirm "API and database ready".
+4. Click "Run synthetic check": Write, Read and Compare confirm in turn, then the
+   persisted ID appears.
+5. Repeat the check: the ID and creation time remain unchanged. This demonstrates
    infrastructure persistence, not agent evaluation or replay.
 
+- If the field looks sparse or does not move, the browser is rendering WebGL in software
+  or the motion control is paused. Hardware acceleration restores the full field;
+  `?quality=high` pins it for a look.
 - If Docker is unavailable, start its Linux engine and retry.
 - If the password file is missing while the DB volume exists, restore that file; the
   script deliberately refuses to silently reset the database.

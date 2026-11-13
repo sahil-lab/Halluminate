@@ -139,3 +139,48 @@ interruption.
 The subsequent smoke run and the complete `Verify` command both exited 0. The final run
 passed all 27 tests and the host persistence/isolation gate. These are functional
 observations, not startup-performance benchmark claims.
+
+## D013 - One hand-written WebGL2 field instead of a graphics library
+
+The user asked twice for a far more ambitious visual result than the first two front
+ends. The page is now built around a single full-viewport WebGL2 canvas.
+
+Each particle carries five precomputed positions (orb, contained world, trace, knot,
+wave field) as vertex attributes. The vertex shader blends between them from one scroll
+value, so a formation change costs no per-frame work in JavaScript. Light is added into
+a half-float buffer and tone-mapped, because plain additive blending clipped dense areas
+to white. A soft glow is drawn at a quarter of the resolution and added on top.
+
+No three.js, animation library or smooth-scroll library was added. The field, the scroll
+director and the pacing rule are about 1,600 lines under `apps/web/src/experience`; the
+production script is 268.83 kB (84.94 kB gzipped) including React. The only new
+dependency is a second locally bundled font. Styles are still set through the CSSOM, so
+the content security policy did not need loosening.
+
+Trade-offs: the shaders and matrix code are ours to maintain; the field needs WebGL2 and
+float render targets for its full look, with a direct-draw path and a static gradient
+behind it; scrolling is native and is not smoothed or hijacked.
+
+## D014 - Keep the page responsive when the renderer cannot keep up
+
+In the bounded Playwright container WebGL is emulated on one CPU. Animating the field
+there held the whole page to about 2 frames a second at 1280x960, and 5 to 7 at the
+lightest level. Hiding the canvas alone brought the same page back to 23, so presenting
+each frame was the cost and fewer particles could not fix it.
+
+A renderer that reports itself as emulated therefore shows each formation as a still
+picture, drawn once when the page reaches it. The page's own loop then measured 60
+frames a second in the same container.
+
+On hardware, a small pacing rule steps the field down through four levels and finally
+holds it still. It averages real frame intervals over 1.2-second windows and acts only
+on two consecutive slow windows, after a 6-second grace period, against budgets of 30,
+30, 40 and 50 ms. The first version acted on one window against 22 ms after 2.5 seconds.
+A check on this machine's GPU showed it dropping a capable renderer to the third level
+during startup hitches, so it was loosened and re-measured. `?quality=` pins a level and
+turns the rule off.
+
+Consequence for testing: the container cannot observe continuous animation at realistic
+sizes. One browser test pins the lightest level at 640x480 to prove that play changes
+the picture and pause freezes it. Continuous animation and frame pacing were checked on
+the host GPU with a local helper, outside the automated suite.
